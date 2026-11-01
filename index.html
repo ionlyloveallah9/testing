@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -15,8 +14,9 @@ body{
   color:#222;padding:18px
 }
 .card{
-  width:100%;max-width:360px;background:white;padding:24px;
-  border-radius:14px;box-shadow:0 5px 25px #0000000a
+  width:100%;max-width:360px;background:white;
+  padding:24px;border-radius:14px;
+  box-shadow:0 5px 25px #0000000a
 }
 h2{margin:0 0 6px;font-size:21px}
 p{color:#888;font-size:13px;margin:0 0 22px}
@@ -31,67 +31,91 @@ button{
   width:100%;padding:13px;border:0;border-radius:8px;
   background:#222;color:white;font-size:14px;cursor:pointer
 }
-button:disabled{opacity:.5;cursor:wait}
+button:disabled{opacity:.5;cursor:not-allowed}
 #status{font-size:13px;margin-top:14px;text-align:center}
+#status.success{color:#168344}
+#status.error{color:#d32f2f}
 </style>
 </head>
 
 <body>
-
 <div class="card">
   <h2>Contact Us</h2>
   <p>Send us your details.</p>
 
   <form id="form" method="POST" target="submitFrame">
-
     <input name="name" placeholder="Your name" required>
-
-    <input name="whatsapp" type="tel"
-      placeholder="WhatsApp number" required>
-
-    <textarea name="description"
-      placeholder="Write your message..." required></textarea>
-
+    <input name="whatsapp" placeholder="WhatsApp number" type="tel" required>
+    <textarea name="description" placeholder="Write your message..." required></textarea>
+    <input type="hidden" name="requestId">
     <button id="send" type="submit">Send Message</button>
   </form>
 
-  <iframe name="submitFrame" hidden></iframe>
-
-  <div id="status" role="status"></div>
+  <iframe name="submitFrame" id="submitFrame" hidden></iframe>
+  <div id="status" role="status" aria-live="polite"></div>
 </div>
 
 <script>
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyw-ZrqwYjep4dEClLhLD5cObCgm0AwVyFZxXRLVcgXs99UoTjlHRgX5dSi2jqtnUJK/exec";
-  
+
 const form = document.getElementById("form");
-const frame = document.querySelector('iframe[name="submitFrame"]');
 const button = document.getElementById("send");
 const status = document.getElementById("status");
+const requestInput = form.querySelector('[name="requestId"]');
 
 form.action = SCRIPT_URL;
 
-let submitted = false;
+let activeRequest = null;
+let timeoutId = null;
 
-frame.addEventListener("load", () => {
-  if (!submitted) return;
+form.addEventListener("submit", () => {
+  const requestId = crypto.randomUUID();
 
-  submitted = false;
+  activeRequest = requestId;
+  requestInput.value = requestId;
+
+  button.disabled = true;
+  button.textContent = "Sending...";
+  status.className = "";
+  status.textContent = "Submitting your details...";
+
+  clearTimeout(timeoutId);
+
+  timeoutId = setTimeout(() => {
+    if (activeRequest !== requestId) return;
+
+    activeRequest = null;
+    button.disabled = false;
+    button.textContent = "Send Message";
+    status.className = "error";
+    status.textContent = "No confirmation received. Check your Google Sheet before trying again.";
+  }, 30000);
+});
+
+window.addEventListener("message", (event) => {
+  const data = event.data;
+
+  if (
+    !data ||
+    data.type !== "WIFI_SHARE_SUBMISSION" ||
+    data.requestId !== activeRequest
+  ) return;
+
+  clearTimeout(timeoutId);
+  activeRequest = null;
+
   button.disabled = false;
   button.textContent = "Send Message";
 
-  status.textContent =
-    "Request completed. Check your Google Sheet.";
-
-  form.reset();
-});
-
-form.addEventListener("submit", () => {
-  submitted = true;
-  button.disabled = true;
-  button.textContent = "Sending...";
-  status.textContent = "Submitting your details...";
+  if (data.success) {
+    status.className = "success";
+    status.textContent = data.message;
+    form.reset();
+  } else {
+    status.className = "error";
+    status.textContent = data.message || "Submission failed.";
+  }
 });
 </script>
-
 </body>
 </html>
